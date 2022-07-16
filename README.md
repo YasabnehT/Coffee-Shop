@@ -1,1 +1,1 @@
-# Coffee-Shop fullstack application for ALX-T's nanodegree program at Udacity.
+# Coffee-Shop(third project) fullstack application for ALX-T's fullstack web development nanodegree program at Udacity.
