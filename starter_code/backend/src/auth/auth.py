@@ -1,4 +1,6 @@
+from asyncio import exceptions
 import json
+from logging import exception
 from flask import request, _request_ctx_stack
 from functools import wraps
 from jose import jwt
@@ -31,7 +33,17 @@ class AuthError(Exception):
     return the token part of the header
 '''
 def get_token_auth_header():
-   raise Exception('Not Implemented')
+    auth_header = request.headers.get('Authorization', None)
+    if auth_header is None:
+        raise AuthError({'code':'authorization_header_missing', 'description': 'header not found'}, 401)
+    header_tokens = auth_header.split()
+    if len(header_tokens) ==1:
+        raise AuthError({'code': 'invalid_header', 'description': 'token not found'})
+    if len(header_tokens)!=2:
+        raise AuthError({'code':'invalid_header', 'description':'not bearer header'})
+    if header_tokens[0].lower() != 'bearer':
+        raise AuthError({'code': 'invalid_header', 'description':'not bearer header'},401)
+    return header_tokens[1]
 
 '''
 @TODO implement check_permissions(permission, payload) method
@@ -45,7 +57,11 @@ def get_token_auth_header():
     return true otherwise
 '''
 def check_permissions(permission, payload):
-    raise Exception('Not Implemented')
+    if 'permissions' not in payload:
+        raise AuthError({'code':'invalid_claims', 'description':'No permissions included'})
+    if permission not in payload:
+        raise AuthError({'code':'forbidden', 'description':'No permission provided'})
+    return True
 
 '''
 @TODO implement verify_decode_jwt(token) method
@@ -61,8 +77,29 @@ def check_permissions(permission, payload):
     !!NOTE urlopen has a common certificate error described here: https://stackoverflow.com/questions/50236117/scraping-ssl-certificate-verify-failed-error-for-http-en-wikipedia-org
 '''
 def verify_decode_jwt(token):
-    raise Exception('Not Implemented')
-
+    jsonurl_open = urlopen(f'https://{AUTH0_DOMAIN}/.well_known/jwks.json')
+    jwks_tokens = json.load(jsonurl_open.read())
+    unverified_jwt_header = jwt.get_unverified_headers(token)
+    rsa_key_list = {}
+    
+    if 'kid' not in unverified_jwt_header:
+        raise AuthError({'code':'invalid_header', 'description': 'missed kid'}, 401)
+    
+    for key in jwks_tokens:
+        if key['kid'] == unverified_jwt_header['kid']:
+            rsa_key_list = {'kty': key['kty'], 'kid': key['kid'],'use': key['use'],'n': key['n'],'e': key['e']}
+            
+    if not rsa_key_list:
+        raise AuthError({
+            'code': 'invalid_key',
+            'description': 'No valid key found'
+        }, 401)
+    try:
+        payload = jwt.decode(token, rsa_key_list, algorithms=ALGORITHMS, audience=API_AUDIENCE, issuer='https:/' + AUTH0_DOMAIN + '/')
+        return payload
+    except exceptions:
+        raise AuthError({'code':'invalid_token', 'description':'No authentication token parsed'})
+    
 '''
 @TODO implement @requires_auth(permission) decorator method
     @INPUTS
